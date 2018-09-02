@@ -4,7 +4,7 @@
 # ## Update
 # -Add Batch Normalization layer after each conv
 # -Add shuffle=True in model.fit() method for a better BN effect (so that we have different batch to normalize in each epoch during the training)
-# -You can use crf method (https://www.kaggle.com/meaninglesslives/apply-crf) to improve the result 
+# -You can use crf method (https://www.kaggle.com/meaninglesslives/apply-crf) to improve the result
 # ## Changelog
 # - Changed uncov to uconv, but removed the dropout in the last layer
 # - Corrected sanity check of predicted validation data (changed from ids_train to ids_valid)
@@ -14,7 +14,7 @@
 # # About
 # Since I am new to learning from image segmentation and kaggle in general I want to share my noteook.
 # I saw it is similar to others as it uses the U-net approach. I want to share it anyway because:
-# 
+#
 # - As said, the field is new to me so I am open to suggestions.
 # - It visualizes some of the steps, e.g. scaling, to learn if the methods do what I expect which might be useful to others (I call them sanity checks).
 # - Added stratification by the amount of salt contained in the image.
@@ -87,7 +87,7 @@ def weighted_bce_loss(y_true, y_pred, weight):
     epsilon = 1e-7
     y_pred = K.clip(y_pred, epsilon, 1. - epsilon)
     logit_y_pred = K.log(y_pred / (1. - y_pred))
-    loss = weight * (logit_y_pred * (1. - y_true) + 
+    loss = weight * (logit_y_pred * (1. - y_true) +
                      K.log(1. + K.exp(-K.abs(logit_y_pred))) + K.maximum(-logit_y_pred, 0.))
     return K.sum(loss) / K.sum(weight)
 
@@ -128,7 +128,7 @@ ROOT = "/home/alexanderliao/data/Kaggle/datasets/pascal-voc-2012/VOC2012"
 IMG_LIST = glob.glob(ROOT+'/SegmentationClass/*.png')
 for i in range(len(IMG_LIST)):
     IMG_LIST[i]=IMG_LIST[i][83:len(IMG_LIST[i])-4]
-    
+
 from PIL import Image
 
 def make_square(im, fill_color=(0, 0, 0, 0)):
@@ -157,13 +157,13 @@ horse=np.array([ -64,0,-128])
 cat=np.array([64,0 ,0])
 bus=np.array([   0,-128,-128])
 cow = np.array([  64,-128,0])
-pottedplant=np.array([[ 0,64,0]])
+pottedplant=np.array([ 0,64,0])
 sofa=np.array([  0,-64,  0])
 background=np.array([0,0,0])
 car=np.array([-128,-128,-128])
 
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+#import matplotlib.pyplot as plt
+#import matplotlib.image as mpimg
 #a=np.array(downsample(np.array(make_square(Image.open(ROOT+"/SegmentationClass/{}.png".format("2007_003143"))),dtype='int8')),dtype='int8')
 #imgplot = plt.imshow(a)
 #k=0
@@ -194,12 +194,12 @@ train_images = [downsample(np.array(make_square(Image.open(ROOT+"/JPEGImages/{}.
 # In[ ]:
 
 
-#train_masks = [np.array(downsample(np.array(make_square(Image.open(ROOT+"/SegmentationClass/{}.png".format(idx))),dtype='int8')),dtype='int8') for idx in tqdm_notebook(IMG_LIST)]
+train_masks = [np.array(downsample(np.array(make_square(Image.open(ROOT+"/SegmentationClass/{}.png".format(idx))),dtype='int8')),dtype='int8') for idx in tqdm_notebook(IMG_LIST)]
 
 #train_df["masks"] = [np.array(load_img("../input/train/masks/{}.png".format(idx), grayscale=True)) / 255 for idx in tqdm_notebook(train_df.index)]
 
 
-"""
+
 from tqdm import tqdm
 int_masks = []
 for i in tqdm(range(len(train_masks))):
@@ -250,9 +250,10 @@ for i in tqdm(range(len(train_masks))):
             elif (image[i,j,:] == ambiguous).all():
                 new_im[i,j,:]=21
     int_masks.append(new_im)
-"""            
+
 
 import pickle
+pickle.dump( int_masks, open( "PASCAL_VOC2012_int_mask.p", "wb" ) )
 int_masks = pickle.load( open( "PASCAL_VOC2012_int_mask.p", "rb" ) )
 #pickle.dump( int_masks, open( "PASCAL_VOC2012_int_mask.p", "wb" ) )
 
@@ -264,12 +265,12 @@ del int_masks
 """
 
 x_train, x_valid, y_train, y_valid = train_test_split(
-   np.array(train_images).reshape(-1, img_size_target, img_size_target, 3), 
-   np.array(int_masks).reshape(-1, img_size_target, img_size_target, 1), 
+   np.array(train_images).reshape(-1, 101, 101, 3),
+   np.array(int_masks).reshape(-1, 101, 101, 1),
    test_size=0.2, random_state=1337)
 
-model =  Deeplabv3(input_shape=(101,101,3),backbone="mobilenetv2", classes=22)  
-
+model =  Deeplabv3(input_shape=(101,101,3),backbone="mobilenetv2", classes=22)
+#model =  Deeplabv3(input_shape=(101,101,3),backbone="xception", classes=22)
 model.compile(loss="sparse_categorical_crossentropy", optimizer="adam", metrics=["accuracy","sparse_categorical_crossentropy"])
 
 
@@ -291,17 +292,14 @@ print(np.repeat(x_train,3,3).shape)
 
 early_stopping = EarlyStopping(patience=50, verbose=1)
 model_checkpoint = ModelCheckpoint("./deeplabv3.model", save_best_only=True, verbose=1)
-reduce_lr = ReduceLROnPlateau(factor=0.5, patience=2, min_lr=0.00001, verbose=1)
+reduce_lr = ReduceLROnPlateau(factor=0.5, patience=35, min_lr=0.00001, verbose=1)
 
 epochs = 500
 batch_size = 32
 
 with tf.device ("/gpu:0"):
     history = model.fit(x_train, y_train,
-                        validation_data=[x_valid, y_valid], 
+                        validation_data=[x_valid, y_valid],
                         epochs=epochs,
                         batch_size=batch_size,
-                        callbacks=[early_stopping, model_checkpoint],shuffle=True)
-
-
-model.load_weights("./deeplabv3.model")
+                        callbacks=[reduce_lr, model_checkpoint],shuffle=True)
